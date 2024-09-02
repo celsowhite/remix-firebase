@@ -4,7 +4,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
 } from "firebase/auth";
-import { auth, googleProvider } from "~/lib/firebase";
+import { auth, googleProvider } from "~/lib/firebase.client";
 import { Form, useActionData } from "@remix-run/react";
 import {
   ActionFunction,
