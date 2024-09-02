@@ -21,16 +21,14 @@ export const loader: LoaderFunction = async ({ request }) => {
     return redirect(`${LOGIN_ROUTE}?${searchParams}`);
   }
 
-  if (!user) {
-    return json({ user: null });
+  let publicUserData = null;
+  if (user) {
+    publicUserData = {
+      uid: user.uid,
+      email: user.email,
+      username: user.username,
+    };
   }
-
-  // Return only the public user data
-  const publicUserData = {
-    uid: user.uid,
-    email: user.email,
-    username: user.username,
-  };
   return json({ user: publicUserData });
 };
 
