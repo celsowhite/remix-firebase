@@ -2,7 +2,12 @@ import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
-  /* your firebase config */
+  apiKey: "AIzaSyBiynubpBcpvsdD97mvUh7hcTUyd8_RH7Y",
+  authDomain: "remix-firebase-starter-31a0b.firebaseapp.com",
+  projectId: "remix-firebase-starter-31a0b",
+  storageBucket: "remix-firebase-starter-31a0b.appspot.com",
+  messagingSenderId: "931917794612",
+  appId: "1:931917794612:web:6dcdb8afa44271996ca961",
 };
 
 let app;
