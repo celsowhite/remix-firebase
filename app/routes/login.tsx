@@ -11,27 +11,61 @@ import {
   json,
   redirect,
   LoaderFunction,
+  ActionFunctionArgs,
 } from "@remix-run/node";
-import { getSession, commitSession, getUserId } from "~/lib/session.server";
+import {
+  getSession,
+  commitSession,
+  getUser,
+  createFirebaseSession,
+} from "~/lib/session.server";
+import { adminAuth, adminDb } from "~/lib/firebase.server";
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const userId = await getUserId(request);
-  if (userId) {
-    return redirect("/dashboard");
+  const user = await getUser(request);
+
+  if (user) {
+    return redirect(`/${user.username}`);
   }
   return json({});
 };
 
-export const action: ActionFunction = async ({ request }) => {
+export const action: ActionFunction = async ({
+  request,
+}: ActionFunctionArgs) => {
   const formData = await request.formData();
   const idToken = formData.get("idToken") as string;
 
   try {
+    // Create a Firebase session cookie
+    const firebaseSessionCookie = await createFirebaseSession(idToken);
+
+    // Store the Firebase session cookie in the Remix session
     const session = await getSession(request.headers.get("Cookie"));
-    session.set("idToken", idToken);
+    session.set("firebaseAuth", firebaseSessionCookie);
     const cookie = await commitSession(session);
 
-    return redirect("/dashboard", {
+    // Get the user data from the decoded token
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    const userId = decodedToken.uid;
+
+    const userDoc = await adminDb.collection("users").doc(userId).get();
+    const username = userDoc.exists
+      ? userDoc.data()?.username || userId
+      : userId;
+
+    await adminDb.collection("users").doc(userId).set(
+      {
+        email: decodedToken.email,
+        username: userId,
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      },
+      { merge: true }
+    );
+
+    // Redirect to the user's profile page using username
+    return redirect(`/${username}`, {
       headers: {
         "Set-Cookie": cookie,
       },
@@ -68,18 +102,7 @@ export default function Login() {
         );
       }
       const idToken = await userCredential.user.getIdToken();
-      const form = event.currentTarget;
-      const formData = new FormData(form);
-      formData.set("idToken", idToken);
-      const action = form.action;
-      const method = form.method;
-      const response = await fetch(action, {
-        method,
-        body: formData,
-      });
-      if (response.redirected) {
-        window.location.href = response.url;
-      }
+      await submitForm(idToken);
     } catch (error) {
       console.error("Error during authentication", error);
     }
@@ -89,17 +112,21 @@ export default function Login() {
     try {
       const userCredential = await signInWithPopup(auth, googleProvider);
       const idToken = await userCredential.user.getIdToken();
-      const formData = new FormData();
-      formData.set("idToken", idToken);
-      const response = await fetch("/login", {
-        method: "post",
-        body: formData,
-      });
-      if (response.redirected) {
-        window.location.href = response.url;
-      }
+      await submitForm(idToken);
     } catch (error) {
       console.error("Error signing in with Google", error);
+    }
+  };
+
+  const submitForm = async (idToken: string) => {
+    const formData = new FormData();
+    formData.set("idToken", idToken);
+    const response = await fetch("/login", {
+      method: "post",
+      body: formData,
+    });
+    if (response.redirected) {
+      window.location.href = response.url;
     }
   };
 

@@ -1,5 +1,5 @@
 import { createCookieSessionStorage } from "@remix-run/node";
-import { adminAuth } from "../lib/firebase.server";
+import { adminAuth, adminDb } from "./firebase.server";
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {
@@ -15,19 +15,46 @@ export const { getSession, commitSession, destroySession } =
       path: "/",
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 5, // 5 days
     },
   });
 
-export async function getUserId(request: Request): Promise<string | null> {
+export async function createFirebaseSession(idToken: string) {
+  // Create a session cookie. This will also verify the ID token in the process.
+  // The session cookie will have the same claims as the ID token.
+  const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days in milliseconds
+  const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+    expiresIn,
+  });
+
+  return sessionCookie;
+}
+
+export async function getUser(request: Request) {
   const session = await getSession(request.headers.get("Cookie"));
-  const idToken = session.get("idToken");
-  if (!idToken) return null;
+  const firebaseAuthCookie = session.get("firebaseAuth");
+
+  if (!firebaseAuthCookie) return null;
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
-    return decodedToken.uid;
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      firebaseAuthCookie,
+      true
+    );
+
+    // Fetch the user's profile from Firestore
+    const userDoc = await adminDb
+      .collection("users")
+      .doc(decodedClaims.uid)
+      .get();
+    const userData = userDoc.data();
+
+    return {
+      ...decodedClaims,
+      ...userData,
+    };
   } catch (error) {
-    console.error("Error verifying ID token:", error);
+    console.error("Error verifying Firebase session cookie:", error);
     return null;
   }
 }
